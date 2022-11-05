@@ -7,6 +7,7 @@ from torch import nn
 from torch import optim
 from torch.nn import functional as F
 import os
+import pandas as pd
 
 class SiameseClassifier(nn.Module):
   def __init__(self):
