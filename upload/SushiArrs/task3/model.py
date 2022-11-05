@@ -6,8 +6,8 @@ import numpy as np
 from torch import nn
 from torch import optim
 from torch.nn import functional as F
-import os
 import pandas as pd
+import os
 
 class SiameseClassifier(nn.Module):
   def __init__(self):
@@ -89,10 +89,10 @@ class MyModel():
           test_results.append(outputs.cpu().numpy()[0][0] * 5)
 
     # add random values - for demo purposes
-    preds = pd.Series(test_results)
+    pred = pd.Series(test_results)
 
     # compute correlation score between predictions and groundtruth
-    prediction_correlation_score = inputs['score'].corr(preds, method='pearson')
+    prediction_correlation_score = pd.Series([e[0] for e in inputs]).corr(pred, method='pearson')
     print(prediction_correlation_score)
     return prediction_correlation_score
 
