@@ -1,5 +1,3 @@
-!pip install transformers
-
 from transformers import AutoTokenizer, AutoModel
 import torch
 import numpy as np
