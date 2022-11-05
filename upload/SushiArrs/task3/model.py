@@ -1,4 +1,4 @@
-#pip install transformers
+!pip install transformers
 
 from transformers import AutoTokenizer, AutoModel
 import torch
@@ -6,6 +6,7 @@ import numpy as np
 from torch import nn
 from torch import optim
 from torch.nn import functional as F
+import os
 
 class SiameseClassifier(nn.Module):
   def __init__(self):
@@ -37,12 +38,11 @@ class MyModel():
     # load tokenizer and model
     self.tokenizer = AutoTokenizer.from_pretrained("dumitrescustefan/bert-base-romanian-uncased-v1")
     self.model = AutoModel.from_pretrained("dumitrescustefan/bert-base-romanian-uncased-v1").cuda()
-    self.params_scores = {}
 
   def create_batch(self, inputs):
     # batching
     el = 0
-    BATCH_SIZE_TRAIN = 10
+    BATCH_SIZE_TRAIN = 100
     batch = []
     batch_data = []
     for (sc, ta, tb) in inputs:
@@ -92,23 +92,11 @@ class MyModel():
 
     # compute correlation score between predictions and groundtruth
     prediction_correlation_score = test_df['score'].corr(test_df['predicted_score'], method='pearson')
-
+    print(prediction_correlation_score)
     return prediction_correlation_score
 
   def load(self, model_resource_folder):
-    self.classifier = SiameseClassifier()
-
-    bsc = 0
-    be = 0
-    lr = None
-
-    for e, d in self.params_scores.items():
-      if d['score'] > bsc:
-        bsc = d['score']
-        lr = d['lr']
-        be = e
-
-    self.classifier.load_state_dict(torch.load('{}/model_{}_{}.thw'.format(model_resource_folder, lr, be)))
+    self.classifier.load_state_dict(torch.load('{}/model.thw'.format(model_resource_folder)))
     self.classifier.eval()    
     # we'll call this code before prediction
     # use this function to load any pretrained model and any other resource, from the given folder path
@@ -117,54 +105,51 @@ class MyModel():
     # we'll call this function right after init
     # place here all your training code
     # at the end of training, place all required resources, trained model, etc in the given model_resource_folder
-    
+    os.mkdir(model_resource_folder, 0o777)
     # data preprocessed for classification
-    # train_data = pd.read_csv(train_data_file, sep='\t', names=['score', 'text_a', 'text_b'])
-    train = self.fetch_data(train_data_frame[:10])
-    # valid_data = pd.read_csv(validation_data_file, sep='\t', names=['score', 'text_a', 'text_b'])
-    valid = self.fetch_data(validation_data_frame[:10])
+    train = self.fetch_data(train_data_frame)
+    valid = self.fetch_data(validation_data_frame)
+    
+    self.classifier.cuda()
     
     train_batch = self.create_batch(train)
-    print(train_batch[0][0].shape)
-    print(train_batch[0][1].shape)
-    for lr in [0.1, 0.05, 0.001, 0.008]:
-      self.classifier = SiameseClassifier()
-      self.classifier.cuda()
+    
+    criterion = nn.BCELoss()
+    optimizer = optim.Adadelta(self.classifier.parameters(), lr=0.007)
 
-      criterion = nn.BCELoss()
-      optimizer = optim.Adadelta(self.classifier.parameters(), lr=lr)
+    bscore = 0
+    EPOCHS = 3000
+    for epoch in range(EPOCHS):
+      running_loss = 0.0
+      for i, data in enumerate(train_batch):
+        labels, inputs = data
+        ia = inputs[0]
+        ib = inputs[1]
 
-      EPOCHS = 11
-      for epoch in range(EPOCHS):
-        running_loss = 0.0
-        for i, data in enumerate(train_batch):
-          labels, inputs = data
-          ia = inputs[0]
-          ib = inputs[1]
-
-          optimizer.zero_grad()
+        optimizer.zero_grad()
 
 
-          outputs = self.classifier(ia, ib)
-          loss = criterion(outputs, labels)
-          loss.backward()
-          optimizer.step()
+        outputs = self.classifier(ia, ib)
+        loss = criterion(outputs, labels)
+        loss.backward()
+        optimizer.step()
 
-          # print statistics
-          running_loss += loss.item()
-        
-        if epoch % 10 == 0:
-          print('epoch:', epoch)
-          self.params_scores[epoch] = {'lr':lr, 'score': self.test_model(valid)}
-          torch.save(self.classifier.state_dict(),'{}/model_{}_{}.thw'.format(model_resource_folder, lr, epoch))
+        # print statistics
+        running_loss += loss.item()
+      
+      if epoch % 10 == 0:
+        print('epoch:', epoch)
+        score = self.test_model(valid)
+        if bscore < score:
+          bscore = score
+          torch.save(self.classifier.state_dict(),'{}/model.thw'.format(model_resource_folder))
 
-  def predict(self, test_data_file):
-    test_df = test_df = pd.read_csv(test_data_file, sep='\t', names=['score', 'text_a', 'text_b'])
-    preproc_test = [(e[0], self.mean_polling(self.tokenize_sentence(e[1])), self.mean_polling(self.tokenize_sentence(e[2]))) for e in test_df.to_numpy()]
+  def predict(self, test_data_frame):
     # we'll call this function after the load()
     # use this place to run the prediction
     # the output of this function is a single value, the Pearson correlation on the similarity score column of the test data and the predicted similiarity scores for each pair of texts in the test data.
-
+    preproc_test = self.fetch_data(test_data_frame)
+    self.classifier.cuda()
     return self.test_model(preproc_test)
 
 
