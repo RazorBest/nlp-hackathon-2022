@@ -89,10 +89,10 @@ class MyModel():
           test_results.append(outputs.cpu().numpy()[0][0] * 5)
 
     # add random values - for demo purposes
-    inputs['predicted_score'] = pd.Series(test_results)
+    preds = pd.Series(test_results)
 
     # compute correlation score between predictions and groundtruth
-    prediction_correlation_score = inputs['score'].corr(inputs['predicted_score'], method='pearson')
+    prediction_correlation_score = inputs['score'].corr(preds, method='pearson')
     print(prediction_correlation_score)
     return prediction_correlation_score
 
